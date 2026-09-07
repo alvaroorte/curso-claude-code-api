@@ -421,3 +421,37 @@ def test_patch_task_on_nonexistent_id_returns_404() -> None:
     assert set(response.json().keys()) == {"detail"}
 
     command.downgrade(config, "base")
+
+
+def test_delete_existing_task_returns_204_and_then_404_on_get() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    project_id = _create_project()
+    state_id = _pendiente_state_id()
+    created = client.post(
+        "/tasks", json={"title": "Tarea", "project_id": project_id, "state_id": state_id}
+    ).json()
+
+    delete_response = client.delete(f"/tasks/{created['id']}")
+    get_response = client.get(f"/tasks/{created['id']}")
+
+    assert delete_response.status_code == 204
+    assert delete_response.content == b""
+    assert get_response.status_code == 404
+
+    command.downgrade(config, "base")
+
+
+def test_delete_nonexistent_task_returns_404() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    response = client.delete("/tasks/999999")
+
+    assert response.status_code == 404
+    assert set(response.json().keys()) == {"detail"}
+
+    command.downgrade(config, "base")

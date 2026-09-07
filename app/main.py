@@ -301,3 +301,14 @@ def update_task(task_id: int, payload: TaskUpdate) -> Task:
     if row is None:
         raise HTTPException(status_code=404, detail=f"task {task_id} not found")
     return _task_from_row(row)
+
+
+@app.delete("/tasks/{task_id}", status_code=204)
+def delete_task(task_id: int) -> Response:
+    with engine.begin() as connection:
+        result = connection.execute(
+            text("DELETE FROM tasks WHERE id = :id"), {"id": task_id}
+        )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail=f"task {task_id} not found")
+    return Response(status_code=204)
