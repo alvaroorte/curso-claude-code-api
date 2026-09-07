@@ -47,3 +47,25 @@ def test_create_project_without_description_returns_null() -> None:
     assert body["description"] is None
 
     command.downgrade(config, "base")
+
+
+def test_list_projects_returns_ordered_by_id_with_exact_schema() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    first_id = client.post("/projects", json={"name": "Casa"}).json()["id"]
+    second_id = client.post("/projects", json={"name": "Trabajo"}).json()["id"]
+
+    first = client.get("/projects")
+    second = client.get("/projects")
+
+    assert first.status_code == 200
+    assert first.json() == second.json()
+    assert [project["id"] for project in first.json()] == sorted(
+        [first_id, second_id]
+    )
+    for project in first.json():
+        assert set(project.keys()) == {"id", "name", "description"}
+
+    command.downgrade(config, "base")

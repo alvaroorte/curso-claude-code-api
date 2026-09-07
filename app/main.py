@@ -49,3 +49,15 @@ def create_project(payload: ProjectCreate) -> Project:
             {"name": payload.name, "description": payload.description},
         ).one()
     return Project(id=row.id, name=row.name, description=row.description)
+
+
+@app.get("/projects")
+def list_projects() -> list[Project]:
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text("SELECT id, name, description FROM projects ORDER BY id")
+        )
+        return [
+            Project(id=row.id, name=row.name, description=row.description)
+            for row in rows
+        ]
