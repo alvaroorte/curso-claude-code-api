@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy import text
 
@@ -78,6 +78,17 @@ def get_project(project_id: int) -> Project:
     if row is None:
         raise HTTPException(status_code=404, detail=f"project {project_id} not found")
     return Project(id=row.id, name=row.name, description=row.description)
+
+
+@app.delete("/projects/{project_id}", status_code=204)
+def delete_project(project_id: int) -> Response:
+    with engine.begin() as connection:
+        result = connection.execute(
+            text("DELETE FROM projects WHERE id = :id"), {"id": project_id}
+        )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail=f"project {project_id} not found")
+    return Response(status_code=204)
 
 
 @app.patch("/projects/{project_id}")

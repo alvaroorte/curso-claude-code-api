@@ -162,3 +162,33 @@ def test_patch_rejects_null_name_with_422() -> None:
     assert response.status_code == 422
 
     command.downgrade(config, "base")
+
+
+def test_delete_existing_project_returns_204_and_then_404_on_get() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    created = client.post("/projects", json={"name": "Casa"}).json()
+
+    delete_response = client.delete(f"/projects/{created['id']}")
+    get_response = client.get(f"/projects/{created['id']}")
+
+    assert delete_response.status_code == 204
+    assert delete_response.content == b""
+    assert get_response.status_code == 404
+
+    command.downgrade(config, "base")
+
+
+def test_delete_nonexistent_project_returns_404() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    response = client.delete("/projects/999999")
+
+    assert response.status_code == 404
+    assert set(response.json().keys()) == {"detail"}
+
+    command.downgrade(config, "base")
