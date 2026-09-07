@@ -192,3 +192,23 @@ def test_delete_nonexistent_project_returns_404() -> None:
     assert set(response.json().keys()) == {"detail"}
 
     command.downgrade(config, "base")
+
+
+def test_delete_project_with_tasks_returns_409() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    project_id = client.post("/projects", json={"name": "Casa"}).json()["id"]
+    state_id = client.get("/states").json()[0]["id"]
+    client.post(
+        "/tasks",
+        json={"title": "Regar las plantas", "project_id": project_id, "state_id": state_id},
+    )
+
+    response = client.delete(f"/projects/{project_id}")
+
+    assert response.status_code == 409
+    assert set(response.json().keys()) == {"detail"}
+
+    command.downgrade(config, "base")
