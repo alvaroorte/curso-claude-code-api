@@ -176,3 +176,93 @@ def test_create_task_with_due_at_without_timezone_returns_422() -> None:
     assert response.status_code == 422
 
     command.downgrade(config, "base")
+
+
+def test_list_tasks_returns_ordered_by_id_with_exact_schema() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    project_id = _create_project()
+    state_id = _pendiente_state_id()
+
+    first_id = client.post(
+        "/tasks", json={"title": "Primera", "project_id": project_id, "state_id": state_id}
+    ).json()["id"]
+    second_id = client.post(
+        "/tasks", json={"title": "Segunda", "project_id": project_id, "state_id": state_id}
+    ).json()["id"]
+
+    first = client.get("/tasks")
+    second = client.get("/tasks")
+
+    assert first.status_code == 200
+    assert first.json() == second.json()
+    assert [task["id"] for task in first.json()] == sorted([first_id, second_id])
+    for task in first.json():
+        assert set(task.keys()) == {
+            "id",
+            "title",
+            "description",
+            "project_id",
+            "state_id",
+            "due_at",
+        }
+
+    command.downgrade(config, "base")
+
+
+def test_list_tasks_filters_by_project_id_and_state_id_alone_and_combined() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    states = client.get("/states").json()
+    pendiente_id = next(s["id"] for s in states if s["code"] == "PENDIENTE")
+    en_curso_id = next(s["id"] for s in states if s["code"] == "EN_CURSO")
+
+    project_a = _create_project("Proyecto A")
+    project_b = _create_project("Proyecto B")
+
+    task_a_pendiente = client.post(
+        "/tasks",
+        json={"title": "A pendiente", "project_id": project_a, "state_id": pendiente_id},
+    ).json()["id"]
+    task_a_en_curso = client.post(
+        "/tasks",
+        json={"title": "A en curso", "project_id": project_a, "state_id": en_curso_id},
+    ).json()["id"]
+    task_b_pendiente = client.post(
+        "/tasks",
+        json={"title": "B pendiente", "project_id": project_b, "state_id": pendiente_id},
+    ).json()["id"]
+
+    by_project = client.get(f"/tasks?project_id={project_a}").json()
+    assert {task["id"] for task in by_project} == {task_a_pendiente, task_a_en_curso}
+
+    by_state = client.get(f"/tasks?state_id={pendiente_id}").json()
+    assert {task["id"] for task in by_state} == {task_a_pendiente, task_b_pendiente}
+
+    combined = client.get(f"/tasks?project_id={project_a}&state_id={pendiente_id}").json()
+    assert {task["id"] for task in combined} == {task_a_pendiente}
+
+    command.downgrade(config, "base")
+
+
+def test_list_tasks_with_nonexistent_filter_returns_empty_list() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    project_id = _create_project()
+    state_id = _pendiente_state_id()
+    client.post(
+        "/tasks", json={"title": "Tarea", "project_id": project_id, "state_id": state_id}
+    )
+
+    response = client.get("/tasks?project_id=999999")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+    command.downgrade(config, "base")

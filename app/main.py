@@ -216,3 +216,24 @@ def create_task(payload: TaskCreate) -> Task:
             },
         ).one()
     return _task_from_row(row)
+
+
+@app.get("/tasks")
+def list_tasks(project_id: int | None = None, state_id: int | None = None) -> list[Task]:
+    filters = []
+    params: dict[str, int] = {}
+    if project_id is not None:
+        filters.append("project_id = :project_id")
+        params["project_id"] = project_id
+    if state_id is not None:
+        filters.append("state_id = :state_id")
+        params["state_id"] = state_id
+
+    query = "SELECT id, title, description, project_id, state_id, due_at FROM tasks"
+    if filters:
+        query += " WHERE " + " AND ".join(filters)
+    query += " ORDER BY id"
+
+    with engine.connect() as connection:
+        rows = connection.execute(text(query), params)
+        return [_task_from_row(row) for row in rows]
