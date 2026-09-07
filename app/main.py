@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
 
@@ -61,3 +61,15 @@ def list_projects() -> list[Project]:
             Project(id=row.id, name=row.name, description=row.description)
             for row in rows
         ]
+
+
+@app.get("/projects/{project_id}")
+def get_project(project_id: int) -> Project:
+    with engine.connect() as connection:
+        row = connection.execute(
+            text("SELECT id, name, description FROM projects WHERE id = :id"),
+            {"id": project_id},
+        ).one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"project {project_id} not found")
+    return Project(id=row.id, name=row.name, description=row.description)

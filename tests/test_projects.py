@@ -69,3 +69,31 @@ def test_list_projects_returns_ordered_by_id_with_exact_schema() -> None:
         assert set(project.keys()) == {"id", "name", "description"}
 
     command.downgrade(config, "base")
+
+
+def test_get_project_by_id_returns_200_when_it_exists() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    created = client.post("/projects", json={"name": "Casa"}).json()
+
+    response = client.get(f"/projects/{created['id']}")
+
+    assert response.status_code == 200
+    assert response.json() == created
+
+    command.downgrade(config, "base")
+
+
+def test_get_project_by_id_returns_404_when_it_does_not_exist() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    response = client.get("/projects/999999")
+
+    assert response.status_code == 404
+    assert set(response.json().keys()) == {"detail"}
+
+    command.downgrade(config, "base")
