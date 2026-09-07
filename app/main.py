@@ -23,6 +23,11 @@ class Project(BaseModel):
     description: str | None = None
 
 
+class ProjectUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -70,6 +75,33 @@ def get_project(project_id: int) -> Project:
             text("SELECT id, name, description FROM projects WHERE id = :id"),
             {"id": project_id},
         ).one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"project {project_id} not found")
+    return Project(id=row.id, name=row.name, description=row.description)
+
+
+@app.patch("/projects/{project_id}")
+def update_project(project_id: int, payload: ProjectUpdate) -> Project:
+    updates = payload.model_dump(exclude_unset=True)
+    if "name" in updates and updates["name"] is None:
+        raise HTTPException(status_code=422, detail="name cannot be null")
+
+    with engine.begin() as connection:
+        if updates:
+            set_clause = ", ".join(f"{field} = :{field}" for field in updates)
+            row = connection.execute(
+                text(
+                    f"UPDATE projects SET {set_clause} WHERE id = :id "
+                    "RETURNING id, name, description"
+                ),
+                {**updates, "id": project_id},
+            ).one_or_none()
+        else:
+            row = connection.execute(
+                text("SELECT id, name, description FROM projects WHERE id = :id"),
+                {"id": project_id},
+            ).one_or_none()
+
     if row is None:
         raise HTTPException(status_code=404, detail=f"project {project_id} not found")
     return Project(id=row.id, name=row.name, description=row.description)
