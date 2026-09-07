@@ -155,11 +155,26 @@ def get_project(project_id: int) -> Project:
 @app.delete("/projects/{project_id}", status_code=204)
 def delete_project(project_id: int) -> Response:
     with engine.begin() as connection:
-        result = connection.execute(
+        exists = connection.execute(
+            text("SELECT 1 FROM projects WHERE id = :id"), {"id": project_id}
+        ).one_or_none()
+        if exists is None:
+            raise HTTPException(
+                status_code=404, detail=f"project {project_id} not found"
+            )
+
+        has_tasks = connection.execute(
+            text("SELECT 1 FROM tasks WHERE project_id = :id LIMIT 1"),
+            {"id": project_id},
+        ).one_or_none()
+        if has_tasks is not None:
+            raise HTTPException(
+                status_code=409, detail=f"project {project_id} has tasks"
+            )
+
+        connection.execute(
             text("DELETE FROM projects WHERE id = :id"), {"id": project_id}
         )
-    if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail=f"project {project_id} not found")
     return Response(status_code=204)
 
 
