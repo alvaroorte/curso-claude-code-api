@@ -237,3 +237,18 @@ def list_tasks(project_id: int | None = None, state_id: int | None = None) -> li
     with engine.connect() as connection:
         rows = connection.execute(text(query), params)
         return [_task_from_row(row) for row in rows]
+
+
+@app.get("/tasks/{task_id}")
+def get_task(task_id: int) -> Task:
+    with engine.connect() as connection:
+        row = connection.execute(
+            text(
+                "SELECT id, title, description, project_id, state_id, due_at "
+                "FROM tasks WHERE id = :id"
+            ),
+            {"id": task_id},
+        ).one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"task {task_id} not found")
+    return _task_from_row(row)

@@ -266,3 +266,35 @@ def test_list_tasks_with_nonexistent_filter_returns_empty_list() -> None:
     assert response.json() == []
 
     command.downgrade(config, "base")
+
+
+def test_get_task_by_id_returns_200_when_it_exists() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    project_id = _create_project()
+    state_id = _pendiente_state_id()
+    created = client.post(
+        "/tasks", json={"title": "Tarea", "project_id": project_id, "state_id": state_id}
+    ).json()
+
+    response = client.get(f"/tasks/{created['id']}")
+
+    assert response.status_code == 200
+    assert response.json() == created
+
+    command.downgrade(config, "base")
+
+
+def test_get_task_by_id_returns_404_when_it_does_not_exist() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    response = client.get("/tasks/999999")
+
+    assert response.status_code == 404
+    assert set(response.json().keys()) == {"detail"}
+
+    command.downgrade(config, "base")
