@@ -298,3 +298,126 @@ def test_get_task_by_id_returns_404_when_it_does_not_exist() -> None:
     assert set(response.json().keys()) == {"detail"}
 
     command.downgrade(config, "base")
+
+
+def test_patch_task_updates_one_field_and_keeps_the_rest() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    project_id = _create_project()
+    state_id = _pendiente_state_id()
+    created = client.post(
+        "/tasks",
+        json={
+            "title": "Regar las plantas",
+            "description": "Todas",
+            "project_id": project_id,
+            "state_id": state_id,
+        },
+    ).json()
+
+    response = client.patch(f"/tasks/{created['id']}", json={"title": "Regar el jardín"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["title"] == "Regar el jardín"
+    assert body["description"] == "Todas"
+    assert body["project_id"] == project_id
+    assert body["state_id"] == state_id
+
+    command.downgrade(config, "base")
+
+
+def test_patch_task_sets_due_at_to_null_when_sent_explicitly() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    project_id = _create_project()
+    state_id = _pendiente_state_id()
+    created = client.post(
+        "/tasks",
+        json={
+            "title": "Tarea",
+            "project_id": project_id,
+            "state_id": state_id,
+            "due_at": "2026-03-01T09:00:00+00:00",
+        },
+    ).json()
+
+    response = client.patch(f"/tasks/{created['id']}", json={"due_at": None})
+
+    assert response.status_code == 200
+    assert response.json()["due_at"] is None
+
+    command.downgrade(config, "base")
+
+
+def test_patch_task_rejects_blank_title_with_422() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    project_id = _create_project()
+    state_id = _pendiente_state_id()
+    created = client.post(
+        "/tasks", json={"title": "Tarea", "project_id": project_id, "state_id": state_id}
+    ).json()
+
+    response = client.patch(f"/tasks/{created['id']}", json={"title": "   "})
+
+    assert response.status_code == 422
+
+    command.downgrade(config, "base")
+
+
+def test_patch_task_with_nonexistent_project_returns_404() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    project_id = _create_project()
+    state_id = _pendiente_state_id()
+    created = client.post(
+        "/tasks", json={"title": "Tarea", "project_id": project_id, "state_id": state_id}
+    ).json()
+
+    response = client.patch(f"/tasks/{created['id']}", json={"project_id": 999999})
+
+    assert response.status_code == 404
+    assert set(response.json().keys()) == {"detail"}
+
+    command.downgrade(config, "base")
+
+
+def test_patch_task_with_nonexistent_state_returns_404() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    project_id = _create_project()
+    state_id = _pendiente_state_id()
+    created = client.post(
+        "/tasks", json={"title": "Tarea", "project_id": project_id, "state_id": state_id}
+    ).json()
+
+    response = client.patch(f"/tasks/{created['id']}", json={"state_id": 999999})
+
+    assert response.status_code == 404
+    assert set(response.json().keys()) == {"detail"}
+
+    command.downgrade(config, "base")
+
+
+def test_patch_task_on_nonexistent_id_returns_404() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    response = client.patch("/tasks/999999", json={"title": "Cualquiera"})
+
+    assert response.status_code == 404
+    assert set(response.json().keys()) == {"detail"}
+
+    command.downgrade(config, "base")

@@ -92,6 +92,14 @@ class Task(BaseModel):
         )
 
 
+class TaskUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    project_id: int | None = None
+    state_id: int | None = None
+    due_at: datetime | None = None
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -249,6 +257,47 @@ def get_task(task_id: int) -> Task:
             ),
             {"id": task_id},
         ).one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"task {task_id} not found")
+    return _task_from_row(row)
+
+
+@app.patch("/tasks/{task_id}")
+def update_task(task_id: int, payload: TaskUpdate) -> Task:
+    updates = payload.model_dump(exclude_unset=True)
+
+    if "title" in updates:
+        if updates["title"] is None:
+            raise HTTPException(status_code=422, detail="title cannot be null")
+        updates["title"] = _normalize_title(updates["title"])
+
+    if "due_at" in updates:
+        updates["due_at"] = _validate_due_at(updates["due_at"])
+
+    with engine.begin() as connection:
+        if "project_id" in updates:
+            _require_project(connection, updates["project_id"])
+        if "state_id" in updates:
+            _require_state(connection, updates["state_id"])
+
+        if updates:
+            set_clause = ", ".join(f"{field} = :{field}" for field in updates)
+            row = connection.execute(
+                text(
+                    f"UPDATE tasks SET {set_clause} WHERE id = :id "
+                    "RETURNING id, title, description, project_id, state_id, due_at"
+                ),
+                {**updates, "id": task_id},
+            ).one_or_none()
+        else:
+            row = connection.execute(
+                text(
+                    "SELECT id, title, description, project_id, state_id, due_at "
+                    "FROM tasks WHERE id = :id"
+                ),
+                {"id": task_id},
+            ).one_or_none()
+
     if row is None:
         raise HTTPException(status_code=404, detail=f"task {task_id} not found")
     return _task_from_row(row)
