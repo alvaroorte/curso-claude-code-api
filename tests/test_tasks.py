@@ -268,6 +268,122 @@ def test_list_tasks_with_nonexistent_filter_returns_empty_list() -> None:
     command.downgrade(config, "base")
 
 
+def test_list_tasks_overdue_true_excludes_future_done_and_undated_tasks() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    states = client.get("/states").json()
+    pendiente_id = next(s["id"] for s in states if s["code"] == "PENDIENTE")
+    hecha_id = next(s["id"] for s in states if s["code"] == "HECHA")
+
+    project_id = _create_project()
+
+    overdue_task = client.post(
+        "/tasks",
+        json={
+            "title": "Vencida",
+            "project_id": project_id,
+            "state_id": pendiente_id,
+            "due_at": "2020-01-01T00:00:00+00:00",
+        },
+    ).json()["id"]
+    future_task = client.post(
+        "/tasks",
+        json={
+            "title": "Futura",
+            "project_id": project_id,
+            "state_id": pendiente_id,
+            "due_at": "2999-01-01T00:00:00+00:00",
+        },
+    ).json()["id"]
+    done_overdue_task = client.post(
+        "/tasks",
+        json={
+            "title": "Vencida pero hecha",
+            "project_id": project_id,
+            "state_id": hecha_id,
+            "due_at": "2020-01-01T00:00:00+00:00",
+        },
+    ).json()["id"]
+    no_due_task = client.post(
+        "/tasks",
+        json={"title": "Sin fecha", "project_id": project_id, "state_id": pendiente_id},
+    ).json()["id"]
+
+    response = client.get("/tasks?overdue=true")
+
+    assert response.status_code == 200
+    ids = [task["id"] for task in response.json()]
+    assert ids == [overdue_task]
+    assert future_task not in ids
+    assert done_overdue_task not in ids
+    assert no_due_task not in ids
+
+    command.downgrade(config, "base")
+
+
+def test_list_tasks_overdue_combined_with_project_id() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    pendiente_id = _pendiente_state_id()
+    project_a = _create_project("Proyecto A")
+    project_b = _create_project("Proyecto B")
+
+    overdue_a = client.post(
+        "/tasks",
+        json={
+            "title": "Vencida A",
+            "project_id": project_a,
+            "state_id": pendiente_id,
+            "due_at": "2020-01-01T00:00:00+00:00",
+        },
+    ).json()["id"]
+    client.post(
+        "/tasks",
+        json={
+            "title": "Vencida B",
+            "project_id": project_b,
+            "state_id": pendiente_id,
+            "due_at": "2020-01-01T00:00:00+00:00",
+        },
+    )
+
+    response = client.get(f"/tasks?overdue=true&project_id={project_a}")
+
+    assert response.status_code == 200
+    assert [task["id"] for task in response.json()] == [overdue_a]
+
+    command.downgrade(config, "base")
+
+
+def test_list_tasks_ignores_overdue_filter_when_value_is_not_true() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    project_id = _create_project()
+    state_id = _pendiente_state_id()
+    client.post(
+        "/tasks",
+        json={
+            "title": "Futura",
+            "project_id": project_id,
+            "state_id": state_id,
+            "due_at": "2999-01-01T00:00:00+00:00",
+        },
+    )
+
+    response = client.get("/tasks?overdue=false")
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+    command.downgrade(config, "base")
+
+
 def test_get_task_by_id_returns_200_when_it_exists() -> None:
     config = _alembic_config()
     command.downgrade(config, "base")
