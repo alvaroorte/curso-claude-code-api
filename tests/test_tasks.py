@@ -40,6 +40,7 @@ def test_create_task_returns_201_with_exact_schema() -> None:
             "project_id": project_id,
             "state_id": state_id,
             "due_at": "2026-03-01T09:00:00+00:00",
+            "priority": 2,
         },
     )
 
@@ -52,12 +53,14 @@ def test_create_task_returns_201_with_exact_schema() -> None:
         "project_id",
         "state_id",
         "due_at",
+        "priority",
     }
     assert body["title"] == "Regar las plantas"
     assert body["description"] == "Todas las macetas"
     assert body["project_id"] == project_id
     assert body["state_id"] == state_id
     assert body["due_at"] == "2026-03-01T09:00:00Z"
+    assert body["priority"] == 2
 
     command.downgrade(config, "base")
 
@@ -79,6 +82,7 @@ def test_create_task_without_optional_fields_returns_null() -> None:
     body = response.json()
     assert body["description"] is None
     assert body["due_at"] is None
+    assert body["priority"] is None
 
     command.downgrade(config, "base")
 
@@ -207,6 +211,7 @@ def test_list_tasks_returns_ordered_by_id_with_exact_schema() -> None:
             "project_id",
             "state_id",
             "due_at",
+            "priority",
         }
 
     command.downgrade(config, "base")
@@ -466,6 +471,52 @@ def test_patch_task_sets_due_at_to_null_when_sent_explicitly() -> None:
 
     assert response.status_code == 200
     assert response.json()["due_at"] is None
+
+    command.downgrade(config, "base")
+
+
+def test_patch_task_sets_and_clears_priority() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    project_id = _create_project()
+    state_id = _pendiente_state_id()
+    created = client.post(
+        "/tasks", json={"title": "Tarea", "project_id": project_id, "state_id": state_id}
+    ).json()
+    assert created["priority"] is None
+
+    set_response = client.patch(f"/tasks/{created['id']}", json={"priority": 5})
+    assert set_response.status_code == 200
+    assert set_response.json()["priority"] == 5
+
+    clear_response = client.patch(f"/tasks/{created['id']}", json={"priority": None})
+    assert clear_response.status_code == 200
+    assert clear_response.json()["priority"] is None
+
+    command.downgrade(config, "base")
+
+
+def test_create_task_rejects_non_integer_priority_with_422() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    project_id = _create_project()
+    state_id = _pendiente_state_id()
+
+    response = client.post(
+        "/tasks",
+        json={
+            "title": "Tarea",
+            "project_id": project_id,
+            "state_id": state_id,
+            "priority": "alta",
+        },
+    )
+
+    assert response.status_code == 422
 
     command.downgrade(config, "base")
 

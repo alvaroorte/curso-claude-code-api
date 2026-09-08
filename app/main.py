@@ -73,6 +73,7 @@ class TaskCreate(BaseModel):
     project_id: int
     state_id: int
     due_at: datetime | None = None
+    priority: int | None = None
 
 
 class Task(BaseModel):
@@ -82,6 +83,7 @@ class Task(BaseModel):
     project_id: int
     state_id: int
     due_at: datetime | None = None
+    priority: int | None = None
 
     @field_serializer("due_at")
     def _serialize_due_at(self, value: datetime | None) -> str | None:
@@ -98,6 +100,7 @@ class TaskUpdate(BaseModel):
     project_id: int | None = None
     state_id: int | None = None
     due_at: datetime | None = None
+    priority: int | None = None
 
 
 @app.get("/health")
@@ -213,6 +216,7 @@ def _task_from_row(row) -> Task:
         project_id=row.project_id,
         state_id=row.state_id,
         due_at=row.due_at,
+        priority=row.priority,
     )
 
 
@@ -226,9 +230,9 @@ def create_task(payload: TaskCreate) -> Task:
         _require_state(connection, payload.state_id)
         row = connection.execute(
             text(
-                "INSERT INTO tasks (title, description, project_id, state_id, due_at) "
-                "VALUES (:title, :description, :project_id, :state_id, :due_at) "
-                "RETURNING id, title, description, project_id, state_id, due_at"
+                "INSERT INTO tasks (title, description, project_id, state_id, due_at, priority) "
+                "VALUES (:title, :description, :project_id, :state_id, :due_at, :priority) "
+                "RETURNING id, title, description, project_id, state_id, due_at, priority"
             ),
             {
                 "title": title,
@@ -236,6 +240,7 @@ def create_task(payload: TaskCreate) -> Task:
                 "project_id": payload.project_id,
                 "state_id": payload.state_id,
                 "due_at": due_at,
+                "priority": payload.priority,
             },
         ).one()
     return _task_from_row(row)
@@ -258,7 +263,7 @@ def list_tasks(
 
     query = (
         "SELECT tasks.id, tasks.title, tasks.description, tasks.project_id, "
-        "tasks.state_id, tasks.due_at FROM tasks"
+        "tasks.state_id, tasks.due_at, tasks.priority FROM tasks"
     )
     if overdue == "true":
         query += " JOIN states ON states.id = tasks.state_id"
@@ -281,7 +286,7 @@ def get_task(task_id: int) -> Task:
     with engine.connect() as connection:
         row = connection.execute(
             text(
-                "SELECT id, title, description, project_id, state_id, due_at "
+                "SELECT id, title, description, project_id, state_id, due_at, priority "
                 "FROM tasks WHERE id = :id"
             ),
             {"id": task_id},
@@ -314,14 +319,14 @@ def update_task(task_id: int, payload: TaskUpdate) -> Task:
             row = connection.execute(
                 text(
                     f"UPDATE tasks SET {set_clause} WHERE id = :id "
-                    "RETURNING id, title, description, project_id, state_id, due_at"
+                    "RETURNING id, title, description, project_id, state_id, due_at, priority"
                 ),
                 {**updates, "id": task_id},
             ).one_or_none()
         else:
             row = connection.execute(
                 text(
-                    "SELECT id, title, description, project_id, state_id, due_at "
+                    "SELECT id, title, description, project_id, state_id, due_at, priority "
                     "FROM tasks WHERE id = :id"
                 ),
                 {"id": task_id},
