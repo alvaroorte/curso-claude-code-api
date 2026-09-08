@@ -36,6 +36,4 @@ Para el resto (levantar la API, infraestructura Docker, configuración), ver
 
 ## Pruebas
 
-- No debilites ni elimines un test existente para conseguir verde. Si el
-  comportamiento acordado cambió, primero se actualiza el contrato
-  (`docs/contrato-api.md`) y después el test, en un commit separado.
+- No debilites ni elimines un test existente para conseguir verde.

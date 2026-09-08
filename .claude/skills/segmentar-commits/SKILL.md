@@ -43,8 +43,14 @@ cuya asignación a un único commit ya es clara por el mapa.
 - Cada commit tiene **una sola intención**: un cambio de comportamiento, una
   migración, un conjunto de tests que prueba lo que el commit anterior ya
   dejó en pie. Si un archivo mezcla dos intenciones, se separa por hunks
-  (`git add -p`, con edición manual del hunk si hace falta) en vez de
-  meterlo entero en un solo commit.
+  (`git add -p`) en vez de meterlo entero en un solo commit. Si el split
+  automático de `git add -p` no alcanza a separarlas (por ejemplo, varias
+  funciones nuevas seguidas dentro de un mismo hunk), se resuelve con la
+  edición manual del hunk (opción `e` de `git add -p`), quitando del parche
+  las líneas que no correspondan a este commit — eso cambia únicamente qué
+  queda en el índice, nunca el archivo del árbol de trabajo. El archivo en
+  disco no se toca en ningún momento de este proceso: nunca se edita ni se
+  reescribe su contenido para producir o simular el estado de un commit.
 - El **orden** entre commits no es arbitrario: cada commit, aplicado sobre el
   anterior, debe dejar el repositorio en un estado que se pueda comprobar
   (correr, testear, lintear) sin depender de un cambio que todavía no se
@@ -93,13 +99,19 @@ caso):
 6. Esperar la aprobación explícita del usuario. No preparar (`git add`) ni
    commitear nada antes de esa aprobación.
 7. Tras la aprobación, ejecutar el reparto commit por commit (`git add` o
-   `git add -p` según corresponda, luego `git commit`), verificando con
-   `git status` entre uno y otro que solo se preparó lo que correspondía a
-   ese commit.
+   `git add -p` según corresponda, con edición manual del hunk cuando el
+   split automático no alcance, luego `git commit`), siempre sobre el
+   cambio tal como ya existe en el árbol de trabajo — nunca editando ni
+   reescribiendo un archivo para armar el contenido de un commit
+   intermedio —, verificando con `git status` entre uno y otro que solo se
+   preparó lo que correspondía a ese commit.
 
 ## Límite
 
 Esta skill no corrige, reescribe ni mejora el código que encuentra: reparte
-los cambios tal como están. No hace `git push`, no reescribe historia
-existente (`rebase`, `commit --amend`) y no commitea nada sin aprobación
-explícita del reparto propuesto.
+los cambios tal como están. Cada commit se arma exclusivamente con `git add`
+(completo o con `-p`, incluida su edición manual de hunk) sobre el cambio
+que ya existe en el árbol de trabajo — nunca editando ni reescribiendo un
+archivo para separar intenciones o simular un estado intermedio. No hace
+`git push`, no reescribe historia existente (`rebase`, `commit --amend`) y
+no commitea nada sin aprobación explícita del reparto propuesto.
