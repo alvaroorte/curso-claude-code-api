@@ -242,20 +242,34 @@ def create_task(payload: TaskCreate) -> Task:
 
 
 @app.get("/tasks")
-def list_tasks(project_id: int | None = None, state_id: int | None = None) -> list[Task]:
+def list_tasks(
+    project_id: int | None = None,
+    state_id: int | None = None,
+    overdue: str | None = None,
+) -> list[Task]:
     filters = []
-    params: dict[str, int] = {}
+    params: dict[str, object] = {}
     if project_id is not None:
-        filters.append("project_id = :project_id")
+        filters.append("tasks.project_id = :project_id")
         params["project_id"] = project_id
     if state_id is not None:
-        filters.append("state_id = :state_id")
+        filters.append("tasks.state_id = :state_id")
         params["state_id"] = state_id
 
-    query = "SELECT id, title, description, project_id, state_id, due_at FROM tasks"
+    query = (
+        "SELECT tasks.id, tasks.title, tasks.description, tasks.project_id, "
+        "tasks.state_id, tasks.due_at FROM tasks"
+    )
+    if overdue == "true":
+        query += " JOIN states ON states.id = tasks.state_id"
+        filters.append("tasks.due_at IS NOT NULL")
+        filters.append("tasks.due_at < :now")
+        filters.append("states.code != 'HECHA'")
+        params["now"] = datetime.now(UTC)
+
     if filters:
         query += " WHERE " + " AND ".join(filters)
-    query += " ORDER BY id"
+    query += " ORDER BY tasks.id"
 
     with engine.connect() as connection:
         rows = connection.execute(text(query), params)
