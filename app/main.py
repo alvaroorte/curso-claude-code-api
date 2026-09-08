@@ -265,7 +265,7 @@ def list_tasks(
         "SELECT tasks.id, tasks.title, tasks.description, tasks.project_id, "
         "tasks.state_id, tasks.due_at, tasks.priority FROM tasks"
     )
-    if overdue == "true":
+    if overdue is not None and overdue.lower() == "true":
         query += " JOIN states ON states.id = tasks.state_id"
         filters.append("tasks.due_at IS NOT NULL")
         filters.append("tasks.due_at < :now")

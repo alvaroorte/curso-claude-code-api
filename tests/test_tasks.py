@@ -389,6 +389,41 @@ def test_list_tasks_ignores_overdue_filter_when_value_is_not_true() -> None:
     command.downgrade(config, "base")
 
 
+def test_list_tasks_overdue_filter_is_case_insensitive() -> None:
+    config = _alembic_config()
+    command.downgrade(config, "base")
+    command.upgrade(config, "head")
+
+    project_id = _create_project()
+    state_id = _pendiente_state_id()
+    overdue_id = client.post(
+        "/tasks",
+        json={
+            "title": "Vencida",
+            "project_id": project_id,
+            "state_id": state_id,
+            "due_at": "2020-01-01T00:00:00+00:00",
+        },
+    ).json()["id"]
+    client.post(
+        "/tasks",
+        json={
+            "title": "Futura",
+            "project_id": project_id,
+            "state_id": state_id,
+            "due_at": "2999-01-01T00:00:00+00:00",
+        },
+    )
+
+    for value in ("True", "TRUE", "tRuE"):
+        response = client.get(f"/tasks?overdue={value}")
+        assert response.status_code == 200
+        ids = [task["id"] for task in response.json()]
+        assert ids == [overdue_id], f"overdue={value} no filtró (devolvió {ids})"
+
+    command.downgrade(config, "base")
+
+
 def test_get_task_by_id_returns_200_when_it_exists() -> None:
     config = _alembic_config()
     command.downgrade(config, "base")
