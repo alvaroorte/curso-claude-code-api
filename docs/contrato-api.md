@@ -16,6 +16,15 @@ abierta salvo las restricciones de seguridad, migración y verificación.
   genere tu framework, siempre que la clave de primer nivel siga siendo
   `detail`.
 - Una referencia a proyecto o estado inexistente no se crea implícitamente.
+- La API no implementa autenticación ni autorización: cualquier cliente con
+  acceso de red puede invocar cualquier endpoint.
+- Los campos de texto (`name`, `title`, `description`) no tienen límite de
+  longitud impuesto por el contrato.
+- Un `POST` no es idempotente: repetir la misma petición crea un recurso
+  nuevo cada vez.
+- El contrato no define un esquema de versionado de la API ni un proceso de
+  deprecación de endpoints.
+- La API no impone límites de tasa (rate limiting) sobre las peticiones.
 
 ### Normalización de texto
 
@@ -40,6 +49,9 @@ un test pueda comparar por posición:
 | `GET /states` | Por el campo de orden del catálogo, y `id` como desempate |
 | `GET /projects` | Por `id` ascendente |
 | `GET /tasks` | Por `id` ascendente, también con filtros aplicados |
+
+Ninguna colección pagina: cada `GET` de lista devuelve siempre el conjunto
+completo de resultados que cumplen los filtros aplicados.
 
 ## Salud
 
