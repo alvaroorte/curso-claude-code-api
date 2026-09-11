@@ -1,0 +1,106 @@
+# Recorrido manual del contrato de TaskFlow (docs/contrato-api.md, v1 y v2).
+# Cada bloque se apoya en la respuesta de un bloque anterior mediante
+# `# @name` y `{{nombre.response.body.$...}}` (sintaxis REST Client / HTTP
+# Client de IntelliJ). Ejecutar en orden, de arriba hacia abajo.
+
+@baseUrl = http://127.0.0.1:8000
+
+### Salud
+GET {{baseUrl}}/health
+
+### Estados — catálogo fijo, sin endpoints de creación ni borrado
+# @name listarEstados
+GET {{baseUrl}}/states
+
+### Proyectos — crea el proyecto que usan las tareas siguientes
+# @name crearProyecto
+POST {{baseUrl}}/projects
+Content-Type: application/json
+
+{
+  "name": "Casa",
+  "description": "Tareas del hogar"
+}
+
+### Proyectos — lista (debe incluir el proyecto recién creado)
+GET {{baseUrl}}/projects
+
+### Proyectos — obtiene por id
+GET {{baseUrl}}/projects/{{crearProyecto.response.body.$.id}}
+
+### Proyectos — actualización parcial
+PATCH {{baseUrl}}/projects/{{crearProyecto.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "description": "Tareas del hogar y del jardín"
+}
+
+### Tareas v1 — crea una tarea sin due_at (compatibilidad v1)
+# @name crearTareaV1
+POST {{baseUrl}}/tasks
+Content-Type: application/json
+
+{
+  "title": "Lavar los platos",
+  "project_id": {{crearProyecto.response.body.$.id}},
+  "state_id": {{listarEstados.response.body.$[0].id}}
+}
+
+### Tareas v2 — crea una tarea con due_at vencido, para el filtro overdue
+# @name crearTareaV2
+POST {{baseUrl}}/tasks
+Content-Type: application/json
+
+{
+  "title": "Regar las plantas",
+  "description": "Maceta del balcón",
+  "project_id": {{crearProyecto.response.body.$.id}},
+  "state_id": {{listarEstados.response.body.$[0].id}},
+  "due_at": "2020-01-01T09:00:00Z"
+}
+
+### Tareas — lista sin filtros (debe incluir ambas tareas)
+GET {{baseUrl}}/tasks
+
+### Tareas — filtro solo por project_id
+GET {{baseUrl}}/tasks?project_id={{crearProyecto.response.body.$.id}}
+
+### Tareas — filtro solo por state_id
+GET {{baseUrl}}/tasks?state_id={{listarEstados.response.body.$[0].id}}
+
+### Tareas — filtros combinados project_id y state_id
+GET {{baseUrl}}/tasks?project_id={{crearProyecto.response.body.$.id}}&state_id={{listarEstados.response.body.$[0].id}}
+
+### Tareas v2 — filtro overdue=true (la tarea anterior está vencida y no está HECHA)
+GET {{baseUrl}}/tasks?overdue=true
+
+### Tareas — obtiene por id
+GET {{baseUrl}}/tasks/{{crearTareaV2.response.body.$.id}}
+
+### Tareas — actualización parcial
+PATCH {{baseUrl}}/tasks/{{crearTareaV1.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "title": "Lavar los platos del almuerzo"
+}
+
+### Tareas — borra por id
+DELETE {{baseUrl}}/tasks/{{crearTareaV1.response.body.$.id}}
+
+### Error — id inexistente (tarea)
+GET {{baseUrl}}/tasks/999999
+
+### Error — validación que falla (título sin ningún carácter visible)
+POST {{baseUrl}}/tasks
+Content-Type: application/json
+
+{
+  "title": "   ",
+  "project_id": {{crearProyecto.response.body.$.id}},
+  "state_id": {{listarEstados.response.body.$[0].id}}
+}
+
+### Error — 409 al borrar un proyecto con tareas (crearTareaV2 sigue asociada)
+DELETE {{baseUrl}}/projects/{{crearProyecto.response.body.$.id}}
