@@ -55,6 +55,20 @@ Copiar `.env.example` a `.env` y ajustar los valores según haga falta.
 - `api.http` recorre ese contrato en la práctica: una petición por método y
   ruta, encadenadas, con casos de error incluidos.
 
+## Especificación OpenAPI
+
+FastAPI la genera sola a partir de las rutas y los modelos: con el servidor
+corriendo se sirve en `GET /openapi.json` (y la UI interactiva en `/docs` y
+`/redoc`). Sin levantar el servidor ni tocar la base de datos también se
+puede obtener, construyéndola en el propio proceso de Python con
+`app.openapi()` —crear el `engine` no abre conexión hasta la primera
+consulta—. El resultado versionado vive en `openapi.json`; para
+regenerarlo:
+
+```bash
+uv run python -c "import json; from app.main import app; json.dump(app.openapi(), open('openapi.json', 'w'), indent=2)"
+```
+
 ## Otros comandos canónicos
 
 ```bash
