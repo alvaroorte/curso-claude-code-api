@@ -1,8 +1,9 @@
 import unicodedata
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Response
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
@@ -46,8 +47,35 @@ def _require_state(connection: Connection, state_id: int) -> None:
         raise HTTPException(status_code=404, detail=f"state {state_id} not found")
 
 
+class Health(BaseModel):
+    status: Literal["ok"]
+
+
+class ErrorDetail(BaseModel):
+    detail: str
+
+
+_MIXED_422_RESPONSE = {
+    422: {
+        "description": "Validation Error",
+        "content": {
+            "application/json": {
+                "schema": {
+                    "oneOf": [
+                        {"$ref": "#/components/schemas/HTTPValidationError"},
+                        {"$ref": "#/components/schemas/ErrorDetail"},
+                    ]
+                }
+            }
+        },
+    }
+}
+
+
 class State(BaseModel):
-    id: int
+    model_config = ConfigDict(extra="forbid")
+
+    id: int = Field(ge=1)
     code: str
 
 
@@ -57,9 +85,11 @@ class ProjectCreate(BaseModel):
 
 
 class Project(BaseModel):
-    id: int
+    model_config = ConfigDict(extra="forbid")
+
+    id: int = Field(ge=1)
     name: str
-    description: str | None = None
+    description: str | None
 
 
 class ProjectUpdate(BaseModel):
@@ -77,13 +107,15 @@ class TaskCreate(BaseModel):
 
 
 class Task(BaseModel):
-    id: int
+    model_config = ConfigDict(extra="forbid")
+
+    id: int = Field(ge=1)
     title: str
-    description: str | None = None
+    description: str | None
     project_id: int
     state_id: int
-    due_at: datetime | None = None
-    priority: int | None = None
+    due_at: datetime | None
+    priority: int | None
 
     @field_serializer("due_at")
     def _serialize_due_at(self, value: datetime | None) -> str | None:
@@ -104,8 +136,8 @@ class TaskUpdate(BaseModel):
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> Health:
+    return Health(status="ok")
 
 
 @app.get("/states")
@@ -143,7 +175,7 @@ def list_projects() -> list[Project]:
         ]
 
 
-@app.get("/projects/{project_id}")
+@app.get("/projects/{project_id}", responses={404: {"model": ErrorDetail}})
 def get_project(project_id: int) -> Project:
     with engine.connect() as connection:
         row = connection.execute(
@@ -155,7 +187,11 @@ def get_project(project_id: int) -> Project:
     return Project(id=row.id, name=row.name, description=row.description)
 
 
-@app.delete("/projects/{project_id}", status_code=204)
+@app.delete(
+    "/projects/{project_id}",
+    status_code=204,
+    responses={404: {"model": ErrorDetail}, 409: {"model": ErrorDetail}},
+)
 def delete_project(project_id: int) -> Response:
     with engine.begin() as connection:
         exists = connection.execute(
@@ -181,7 +217,10 @@ def delete_project(project_id: int) -> Response:
     return Response(status_code=204)
 
 
-@app.patch("/projects/{project_id}")
+@app.patch(
+    "/projects/{project_id}",
+    responses={404: {"model": ErrorDetail}, **_MIXED_422_RESPONSE},
+)
 def update_project(project_id: int, payload: ProjectUpdate) -> Project:
     updates = payload.model_dump(exclude_unset=True)
     if "name" in updates and updates["name"] is None:
@@ -220,7 +259,11 @@ def _task_from_row(row) -> Task:
     )
 
 
-@app.post("/tasks", status_code=201)
+@app.post(
+    "/tasks",
+    status_code=201,
+    responses={404: {"model": ErrorDetail}, **_MIXED_422_RESPONSE},
+)
 def create_task(payload: TaskCreate) -> Task:
     title = _normalize_title(payload.title)
     due_at = _validate_due_at(payload.due_at)
@@ -281,7 +324,7 @@ def list_tasks(
         return [_task_from_row(row) for row in rows]
 
 
-@app.get("/tasks/{task_id}")
+@app.get("/tasks/{task_id}", responses={404: {"model": ErrorDetail}})
 def get_task(task_id: int) -> Task:
     with engine.connect() as connection:
         row = connection.execute(
@@ -296,7 +339,10 @@ def get_task(task_id: int) -> Task:
     return _task_from_row(row)
 
 
-@app.patch("/tasks/{task_id}")
+@app.patch(
+    "/tasks/{task_id}",
+    responses={404: {"model": ErrorDetail}, **_MIXED_422_RESPONSE},
+)
 def update_task(task_id: int, payload: TaskUpdate) -> Task:
     updates = payload.model_dump(exclude_unset=True)
 
@@ -337,7 +383,11 @@ def update_task(task_id: int, payload: TaskUpdate) -> Task:
     return _task_from_row(row)
 
 
-@app.delete("/tasks/{task_id}", status_code=204)
+@app.delete(
+    "/tasks/{task_id}",
+    status_code=204,
+    responses={404: {"model": ErrorDetail}},
+)
 def delete_task(task_id: int) -> Response:
     with engine.begin() as connection:
         result = connection.execute(
