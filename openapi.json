@@ -8,6 +8,7 @@
     "/health": {
       "get": {
         "summary": "Health",
+        "description": "Comprueba que el servicio est\u00e1 arriba.",
         "operationId": "health_health_get",
         "responses": {
           "200": {
@@ -26,6 +27,7 @@
     "/states": {
       "get": {
         "summary": "List States",
+        "description": "Lista el cat\u00e1logo fijo de estados, en orden.",
         "operationId": "list_states_states_get",
         "responses": {
           "200": {
