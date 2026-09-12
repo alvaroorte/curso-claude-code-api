@@ -135,7 +135,7 @@ class TaskUpdate(BaseModel):
     priority: int | None = None
 
 
-@app.get("/health")
+@app.get("/health", description="Comprueba que el servicio está arriba.")
 def health() -> Health:
     return Health(status="ok")
 
