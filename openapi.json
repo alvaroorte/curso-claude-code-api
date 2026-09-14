@@ -69,6 +69,7 @@
       },
       "post": {
         "summary": "Create Project",
+        "description": "Crea un proyecto.",
         "operationId": "create_project_projects_post",
         "requestBody": {
           "content": {

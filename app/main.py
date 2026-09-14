@@ -140,7 +140,7 @@ def health() -> Health:
     return Health(status="ok")
 
 
-@app.get("/states")
+@app.get("/states", description="Lista el catálogo fijo de estados, en orden.")
 def list_states() -> list[State]:
     with engine.connect() as connection:
         rows = connection.execute(
@@ -149,7 +149,7 @@ def list_states() -> list[State]:
         return [State(id=row.id, code=row.code) for row in rows]
 
 
-@app.post("/projects", status_code=201)
+@app.post("/projects", status_code=201, description="Crea un proyecto.")
 def create_project(payload: ProjectCreate) -> Project:
     with engine.begin() as connection:
         row = connection.execute(

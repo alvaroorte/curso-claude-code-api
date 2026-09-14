@@ -41,6 +41,32 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/regenerate-openapi.sh",
+            "if": "Edit(./app/main.py)",
+            "timeout": 10,
+            "statusMessage": "Regenerando openapi.json..."
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/regenerate-openapi.sh",
+            "if": "Write(./app/main.py)",
+            "timeout": 10,
+            "statusMessage": "Regenerando openapi.json..."
+          }
+        ]
+      }
     ]
   }
 }
