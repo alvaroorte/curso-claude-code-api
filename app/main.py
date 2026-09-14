@@ -1,75 +1,28 @@
-import unicodedata
 from datetime import UTC, datetime
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, Response
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 from sqlalchemy import text
-from sqlalchemy.engine import Connection
 
 from app.db import engine
+from app.errors import (
+    MIXED_422_RESPONSE,
+    ErrorDetail,
+    conflict_has_tasks,
+    field_cannot_be_null,
+    normalize_title,
+    not_found,
+    require_project,
+    require_state,
+    validate_due_at,
+)
 
 app = FastAPI()
-
-_INVISIBLE_TITLE_CATEGORIES = {"Cc", "Cf", "Zl", "Zp", "Zs"}
-
-
-def _normalize_title(title: str) -> str:
-    stripped = title.strip()
-    if all(unicodedata.category(char) in _INVISIBLE_TITLE_CATEGORIES for char in stripped):
-        raise HTTPException(
-            status_code=422, detail="title must contain a visible character"
-        )
-    return stripped
-
-
-def _validate_due_at(due_at: datetime | None) -> datetime | None:
-    if due_at is None:
-        return None
-    if due_at.tzinfo is None:
-        raise HTTPException(status_code=422, detail="due_at must include a timezone")
-    return due_at.astimezone(UTC)
-
-
-def _require_project(connection: Connection, project_id: int) -> None:
-    exists = connection.execute(
-        text("SELECT 1 FROM projects WHERE id = :id"), {"id": project_id}
-    ).one_or_none()
-    if exists is None:
-        raise HTTPException(status_code=404, detail=f"project {project_id} not found")
-
-
-def _require_state(connection: Connection, state_id: int) -> None:
-    exists = connection.execute(
-        text("SELECT 1 FROM states WHERE id = :id"), {"id": state_id}
-    ).one_or_none()
-    if exists is None:
-        raise HTTPException(status_code=404, detail=f"state {state_id} not found")
 
 
 class Health(BaseModel):
     status: Literal["ok"]
-
-
-class ErrorDetail(BaseModel):
-    detail: str
-
-
-_MIXED_422_RESPONSE = {
-    422: {
-        "description": "Validation Error",
-        "content": {
-            "application/json": {
-                "schema": {
-                    "oneOf": [
-                        {"$ref": "#/components/schemas/HTTPValidationError"},
-                        {"$ref": "#/components/schemas/ErrorDetail"},
-                    ]
-                }
-            }
-        },
-    }
-}
 
 
 class State(BaseModel):
@@ -183,7 +136,7 @@ def get_project(project_id: int) -> Project:
             {"id": project_id},
         ).one_or_none()
     if row is None:
-        raise HTTPException(status_code=404, detail=f"project {project_id} not found")
+        raise not_found("project", project_id)
     return Project(id=row.id, name=row.name, description=row.description)
 
 
@@ -198,18 +151,14 @@ def delete_project(project_id: int) -> Response:
             text("SELECT 1 FROM projects WHERE id = :id"), {"id": project_id}
         ).one_or_none()
         if exists is None:
-            raise HTTPException(
-                status_code=404, detail=f"project {project_id} not found"
-            )
+            raise not_found("project", project_id)
 
         has_tasks = connection.execute(
             text("SELECT 1 FROM tasks WHERE project_id = :id LIMIT 1"),
             {"id": project_id},
         ).one_or_none()
         if has_tasks is not None:
-            raise HTTPException(
-                status_code=409, detail=f"project {project_id} has tasks"
-            )
+            raise conflict_has_tasks("project", project_id)
 
         connection.execute(
             text("DELETE FROM projects WHERE id = :id"), {"id": project_id}
@@ -219,12 +168,12 @@ def delete_project(project_id: int) -> Response:
 
 @app.patch(
     "/projects/{project_id}",
-    responses={404: {"model": ErrorDetail}, **_MIXED_422_RESPONSE},
+    responses={404: {"model": ErrorDetail}, **MIXED_422_RESPONSE},
 )
 def update_project(project_id: int, payload: ProjectUpdate) -> Project:
     updates = payload.model_dump(exclude_unset=True)
     if "name" in updates and updates["name"] is None:
-        raise HTTPException(status_code=422, detail="name cannot be null")
+        raise field_cannot_be_null("name")
 
     with engine.begin() as connection:
         if updates:
@@ -243,7 +192,7 @@ def update_project(project_id: int, payload: ProjectUpdate) -> Project:
             ).one_or_none()
 
     if row is None:
-        raise HTTPException(status_code=404, detail=f"project {project_id} not found")
+        raise not_found("project", project_id)
     return Project(id=row.id, name=row.name, description=row.description)
 
 
@@ -262,15 +211,15 @@ def _task_from_row(row) -> Task:
 @app.post(
     "/tasks",
     status_code=201,
-    responses={404: {"model": ErrorDetail}, **_MIXED_422_RESPONSE},
+    responses={404: {"model": ErrorDetail}, **MIXED_422_RESPONSE},
 )
 def create_task(payload: TaskCreate) -> Task:
-    title = _normalize_title(payload.title)
-    due_at = _validate_due_at(payload.due_at)
+    title = normalize_title(payload.title)
+    due_at = validate_due_at(payload.due_at)
 
     with engine.begin() as connection:
-        _require_project(connection, payload.project_id)
-        _require_state(connection, payload.state_id)
+        require_project(connection, payload.project_id)
+        require_state(connection, payload.state_id)
         row = connection.execute(
             text(
                 "INSERT INTO tasks (title, description, project_id, state_id, due_at, priority) "
@@ -335,30 +284,30 @@ def get_task(task_id: int) -> Task:
             {"id": task_id},
         ).one_or_none()
     if row is None:
-        raise HTTPException(status_code=404, detail=f"task {task_id} not found")
+        raise not_found("task", task_id)
     return _task_from_row(row)
 
 
 @app.patch(
     "/tasks/{task_id}",
-    responses={404: {"model": ErrorDetail}, **_MIXED_422_RESPONSE},
+    responses={404: {"model": ErrorDetail}, **MIXED_422_RESPONSE},
 )
 def update_task(task_id: int, payload: TaskUpdate) -> Task:
     updates = payload.model_dump(exclude_unset=True)
 
     if "title" in updates:
         if updates["title"] is None:
-            raise HTTPException(status_code=422, detail="title cannot be null")
-        updates["title"] = _normalize_title(updates["title"])
+            raise field_cannot_be_null("title")
+        updates["title"] = normalize_title(updates["title"])
 
     if "due_at" in updates:
-        updates["due_at"] = _validate_due_at(updates["due_at"])
+        updates["due_at"] = validate_due_at(updates["due_at"])
 
     with engine.begin() as connection:
         if "project_id" in updates:
-            _require_project(connection, updates["project_id"])
+            require_project(connection, updates["project_id"])
         if "state_id" in updates:
-            _require_state(connection, updates["state_id"])
+            require_state(connection, updates["state_id"])
 
         if updates:
             set_clause = ", ".join(f"{field} = :{field}" for field in updates)
@@ -379,7 +328,7 @@ def update_task(task_id: int, payload: TaskUpdate) -> Task:
             ).one_or_none()
 
     if row is None:
-        raise HTTPException(status_code=404, detail=f"task {task_id} not found")
+        raise not_found("task", task_id)
     return _task_from_row(row)
 
 
@@ -394,5 +343,5 @@ def delete_task(task_id: int) -> Response:
             text("DELETE FROM tasks WHERE id = :id"), {"id": task_id}
         )
     if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail=f"task {task_id} not found")
+        raise not_found("task", task_id)
     return Response(status_code=204)
